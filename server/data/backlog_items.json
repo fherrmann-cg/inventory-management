@@ -38,5 +38,25 @@
     "quantity_available": 275,
     "days_delayed": 5,
     "priority": "medium"
+  },
+  {
+    "id": "5",
+    "order_id": "ORD-2025-0931",
+    "item_sku": "CBL-220",
+    "item_name": "Industrial Control Cable",
+    "quantity_needed": 320,
+    "quantity_available": 180,
+    "days_delayed": 8,
+    "priority": "high"
+  },
+  {
+    "id": "6",
+    "order_id": "ORD-2025-0932",
+    "item_sku": "PSU-150",
+    "item_name": "Power Supply Unit 150W",
+    "quantity_needed": 75,
+    "quantity_available": 30,
+    "days_delayed": 10,
+    "priority": "high"
   }
 ]
