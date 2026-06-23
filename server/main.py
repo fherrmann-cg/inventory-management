@@ -2,7 +2,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from pydantic import BaseModel
+from datetime import datetime, timedelta
 from mock_data import inventory_items, orders, demand_forecasts, backlog_items, spending_summary, monthly_spending, category_spending, recent_transactions, purchase_orders
+import random
 
 app = FastAPI(title="Factory Inventory Management System")
 
@@ -45,6 +47,9 @@ def apply_filters(items: list, warehouse: Optional[str] = None, category: Option
         filtered = [item for item in filtered if item.get('status', '').lower() == status.lower()]
 
     return filtered
+
+# In-memory storage for submitted restocking orders
+submitted_orders = []
 
 # CORS middleware
 app.add_middleware(
@@ -120,6 +125,17 @@ class CreatePurchaseOrderRequest(BaseModel):
     expected_delivery_date: str
     notes: Optional[str] = None
 
+class RestockingOrderItem(BaseModel):
+    item_sku: str
+    item_name: str
+    quantity: int
+    unit_price: float
+    lead_time_days: Optional[int] = None
+
+class CreateRestockingOrderRequest(BaseModel):
+    items: List[RestockingOrderItem]
+    total_value: float
+
 # API endpoints
 @app.get("/")
 def root():
@@ -148,8 +164,10 @@ def get_orders(
     status: Optional[str] = None,
     month: Optional[str] = None
 ):
-    """Get all orders with optional filtering"""
-    filtered_orders = apply_filters(orders, warehouse, category, status)
+    """Get all orders with optional filtering (includes submitted restocking orders)"""
+    # Combine regular orders with submitted restocking orders
+    all_orders = orders + submitted_orders
+    filtered_orders = apply_filters(all_orders, warehouse, category, status)
     filtered_orders = filter_by_month(filtered_orders, month)
     return filtered_orders
 
@@ -303,6 +321,49 @@ def get_monthly_trends():
     result = list(months.values())
     result.sort(key=lambda x: x['month'])
     return result
+
+@app.post("/api/restocking-orders", response_model=Order)
+def create_restocking_order(request: CreateRestockingOrderRequest):
+    """Create a restocking order with variable lead times per item"""
+    # Assign random lead times (5-14 days) to each item
+    items_with_lead_times = []
+    max_lead_time = 5
+
+    for item in request.items:
+        lead_time = random.randint(5, 14)
+        max_lead_time = max(max_lead_time, lead_time)
+        item_dict = item.dict()
+        item_dict['lead_time_days'] = lead_time
+        items_with_lead_times.append(item_dict)
+
+    # Calculate expected delivery: today + max lead time
+    today = datetime.now()
+    expected_delivery = today + timedelta(days=max_lead_time)
+
+    # Create order record
+    order_id = f"RST-{len(submitted_orders) + 1:03d}"
+    order_number = f"RST-2025-{len(submitted_orders) + 1:03d}"
+
+    new_order = {
+        "id": order_id,
+        "order_number": order_number,
+        "customer": "Internal Restocking",
+        "items": items_with_lead_times,
+        "status": "Submitted",
+        "order_date": today.strftime("%Y-%m-%d"),
+        "expected_delivery": expected_delivery.strftime("%Y-%m-%d"),
+        "total_value": request.total_value,
+        "warehouse": "All",
+        "category": "Mixed"
+    }
+
+    submitted_orders.append(new_order)
+    return new_order
+
+@app.get("/api/restocking-orders", response_model=List[Order])
+def get_restocking_orders():
+    """Get all submitted restocking orders"""
+    return submitted_orders
 
 if __name__ == "__main__":
     import uvicorn
