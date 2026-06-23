@@ -128,6 +128,13 @@ export const api = {
     return response.data
   },
 
+  async getPanicAdvice(backlogCount = 0) {
+    const response = await axios.get(`${API_BASE_URL}/panic-advice`, {
+      params: { backlog_count: backlogCount }
+    })
+    return response.data
+  },
+
   async getReportsMonthlyTrends(filters = {}) {
     const params = new URLSearchParams()
     if (filters.warehouse && filters.warehouse !== 'all') params.append('warehouse', filters.warehouse)

@@ -5,6 +5,9 @@ from pydantic import BaseModel
 from datetime import datetime, timedelta
 from mock_data import inventory_items, orders, demand_forecasts, backlog_items, spending_summary, monthly_spending, category_spending, recent_transactions, purchase_orders
 import random
+import os
+import time
+import httpx
 
 app = FastAPI(title="Factory Inventory Management System")
 
@@ -364,6 +367,118 @@ def create_restocking_order(request: CreateRestockingOrderRequest):
 def get_restocking_orders():
     """Get all submitted restocking orders"""
     return submitted_orders
+
+# ============================================================
+# PANIC ADVICE — powered by grossly over-engineered AI
+# because a simple IF statement would be too easy
+# ============================================================
+
+# Azure OpenAI configuration (must be set via environment variables)
+AZURE_OPENAI_ENDPOINT = os.environ.get(
+    "AZURE_OPENAI_ENDPOINT",
+    ""
+)
+AZURE_OPENAI_KEY = os.environ.get(
+    "AZURE_OPENAI_KEY",
+    ""
+)
+
+# Simple in-memory cache: { timestamp: float, data: dict }
+_panic_advice_cache: dict = {}
+CACHE_TTL_SECONDS = 30
+
+
+@app.get("/api/panic-advice")
+async def get_panic_advice(backlog_count: int = 0):
+    """
+    Consult three AI agents about the backlog situation.
+    Because apparently 'you have too many backlog items' needed
+    a neural network to figure out.
+    """
+    now = time.time()
+    cached = _panic_advice_cache.get("data")
+    cached_at = _panic_advice_cache.get("timestamp", 0)
+
+    if cached and (now - cached_at) < CACHE_TTL_SECONDS:
+        return cached
+
+    system_prompt = (
+        "You are a system prompt for a comically over-engineered multi-agent advisory panel. "
+        "The user has a backlog of items in an inventory management system. "
+        "You will respond as THREE distinct agents, each giving a 1-2 sentence take. "
+        "Be extremely brief — each agent gets AT MOST two sentences. "
+        "Return ONLY valid JSON with this structure:\n"
+        '{\n'
+        '  "logistics_expert": "...",\n'
+        '  "comedian": "...",\n'
+        '  "doom_prophet": "..."\n'
+        '}\n'
+        "No markdown, no code fences, just raw JSON."
+    )
+
+    user_prompt = (
+        f"The inventory dashboard has {backlog_count} backlog items causing a PANIC MODE alert. "
+        "The Logistics Expert gives calm, practical 1-sentence advice. "
+        "The Comedian makes a single dry joke about how absurd it is that we deployed GPT-4 "
+        "to explain a backlog. "
+        "The Doom Prophet delivers dramatic 1-2 sentence worst-case prophecy. "
+        "Keep each response to 1-2 sentences maximum."
+    )
+
+    fallback = {
+        "logistics_expert": "Prioritize high-priority backlog items first and contact suppliers immediately for expedited delivery.",
+        "comedian": "Congratulations — you've successfully used a large language model to tell you what a sticky note on your monitor already said.",
+        "doom_prophet": "The supply chain has spoken. The shelves will empty. The auditors will come. No one escapes the backlog.",
+        "cached": False,
+        "error": None
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(
+                f"{AZURE_OPENAI_ENDPOINT}/chat/completions",
+                headers={
+                    "api-key": AZURE_OPENAI_KEY,
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "gpt-4o",
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "max_tokens": 300,
+                    "temperature": 0.85
+                }
+            )
+
+        if response.status_code != 200:
+            fallback["error"] = f"API returned {response.status_code}"
+            return fallback
+
+        raw = response.json()
+        content = raw["choices"][0]["message"]["content"].strip()
+
+        import json as _json
+        agents = _json.loads(content)
+
+        result = {
+            "logistics_expert": agents.get("logistics_expert", fallback["logistics_expert"]),
+            "comedian": agents.get("comedian", fallback["comedian"]),
+            "doom_prophet": agents.get("doom_prophet", fallback["doom_prophet"]),
+            "cached": False,
+            "error": None
+        }
+
+        _panic_advice_cache["data"] = {**result, "cached": True}
+        _panic_advice_cache["timestamp"] = now
+
+        return result
+
+    except Exception as exc:
+        fallback["error"] = str(exc)
+        return fallback
+
 
 if __name__ == "__main__":
     import uvicorn
