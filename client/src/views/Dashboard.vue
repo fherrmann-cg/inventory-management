@@ -1,7 +1,10 @@
 <template>
-  <div class="dashboard">
+  <div class="dashboard" :class="{ 'panic-mode': panicMode }">
     <div class="page-header">
       <h2>{{ t('dashboard.title') }}</h2>
+      <p class="page-subtitle" :class="{ 'panic-subtitle': panicMode }">
+        {{ panicMode ? '⚠️ SITUATION CRITICAL ⚠️' : 'Summary of key metrics' }}
+      </p>
     </div>
 
     <div v-if="loading" class="loading">{{ t('common.loading') }}</div>
@@ -158,9 +161,15 @@
         </div>
 
         <!-- Inventory Shortages -->
-        <div class="card chart-card full-width">
+        <div class="card chart-card full-width" :class="{ 'panic-card': panicMode }">
           <div class="card-header">
-            <h3 class="card-title">{{ t('dashboard.inventoryShortages.title') }} ({{ backlogItems.length }})</h3>
+            <h3 class="card-title" :class="{ 'panic-card-title': panicMode }">
+              {{ panicMode ? 'CRITICAL BACKLOG' : t('dashboard.inventoryShortages.title') }}
+              ({{ backlogItems.length }})
+            </h3>
+            <div v-if="panicMode" class="panic-warning-banner">
+              ALERT: Backlog has exceeded safe operational limits. Management has been notified. Management is also panicking. Nobody is okay.
+            </div>
           </div>
           <div v-if="backlogItems.length === 0" class="no-backlog">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="success-icon">
@@ -558,6 +567,9 @@ export default {
       return allBacklogItems.value.filter(b => validSkus.has(b.item_sku))
     })
 
+    // PANIC MODE: activates when backlog items exceed the threshold of doom
+    const panicMode = computed(() => backlogItems.value.length > 5)
+
     const loadData = async () => {
       try {
         loading.value = true
@@ -720,7 +732,8 @@ export default {
       poModalMode,
       openPOModal,
       viewPO,
-      handlePOCreated
+      handlePOCreated,
+      panicMode
     }
   }
 }
@@ -1267,5 +1280,87 @@ export default {
   background: #475569;
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(100, 116, 139, 0.3);
+}
+
+/* ============================================================
+   PANIC MODE — for when the backlog has gotten completely
+   out of control and no one is okay
+   ============================================================ */
+
+@keyframes shake {
+  0%   { transform: translate(0, 0) rotate(0deg); }
+  10%  { transform: translate(-2px, -1px) rotate(-0.3deg); }
+  20%  { transform: translate(2px, 1px) rotate(0.3deg); }
+  30%  { transform: translate(-2px, 1px) rotate(0deg); }
+  40%  { transform: translate(2px, -1px) rotate(0.3deg); }
+  50%  { transform: translate(-1px, 2px) rotate(-0.3deg); }
+  60%  { transform: translate(1px, -2px) rotate(0deg); }
+  70%  { transform: translate(-2px, 1px) rotate(-0.3deg); }
+  80%  { transform: translate(2px, 1px) rotate(0.3deg); }
+  90%  { transform: translate(-1px, -1px) rotate(0deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+@keyframes pulse-bg {
+  0%   { filter: brightness(1); }
+  50%  { filter: brightness(1.08); }
+  100% { filter: brightness(1); }
+}
+
+@keyframes panic-flash {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.7; }
+}
+
+.panic-mode {
+  animation: shake 0.4s ease-in-out infinite, pulse-bg 1.2s ease-in-out infinite;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(239, 68, 68, 0.07) 0px,
+    rgba(239, 68, 68, 0.07) 10px,
+    transparent 10px,
+    transparent 20px
+  );
+  border-radius: 8px;
+  padding: 0.5rem;
+}
+
+.page-subtitle {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0.25rem 0 0;
+}
+
+.panic-subtitle {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #dc2626;
+  letter-spacing: 0.05em;
+  animation: panic-flash 0.8s ease-in-out infinite;
+}
+
+.panic-card {
+  border: 2px solid #ef4444 !important;
+  background: #fff5f5 !important;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15) !important;
+}
+
+.panic-card-title {
+  color: #dc2626 !important;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.panic-warning-banner {
+  margin-top: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  font-size: 0.813rem;
+  font-weight: 600;
+  color: #b91c1c;
+  line-height: 1.4;
 }
 </style>
